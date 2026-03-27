@@ -437,33 +437,76 @@ html,body{height:100%;background:var(--bg);color:var(--t);font-family:-apple-sys
 
 /* ── Desk floor */
 .desk-floor{
-  flex:1;display:flex;flex-wrap:wrap;
-  gap:14px;padding:32px;
-  align-content:flex-start;overflow-y:auto;
+  flex:1;overflow-y:auto;
+  padding:40px 40px 32px;
+  background:var(--bg);
 }
-.desk-floor-title{
-  width:100%;font-size:11px;font-weight:600;letter-spacing:.07em;
-  text-transform:uppercase;color:var(--m2);margin-bottom:4px;
+.desk-floor-label{
+  font-size:10px;font-weight:600;letter-spacing:.09em;
+  text-transform:uppercase;color:var(--m2);margin-bottom:20px;
+}
+.desk-grid{
+  display:flex;flex-wrap:wrap;gap:16px;
 }
 .desk-card{
-  width:152px;background:var(--s);border:1px solid var(--b);
-  border-radius:10px;padding:16px 14px;cursor:pointer;
+  width:168px;background:var(--s);border:1px solid var(--b);
+  border-radius:12px;padding:20px 16px 16px;cursor:pointer;
   transition:all 0.18s ease;display:flex;flex-direction:column;
-  align-items:center;gap:7px;text-align:center;
+  align-items:center;gap:8px;text-align:center;
+  position:relative;
 }
-.desk-card:hover{border-color:var(--b2);background:var(--s2);transform:translateY(-2px)}
-.desk-card.add-card{border-style:dashed;border-color:var(--b)}
-.desk-card.add-card:hover{border-color:var(--b2)}
-.desk-svg{opacity:.7}
+.desk-card:hover{border-color:var(--b2);background:var(--s2);transform:translateY(-2px);box-shadow:0 8px 24px rgba(0,0,0,.3)}
+.desk-card.active{border-color:var(--accent);background:rgba(124,92,252,.07)}
+.desk-card.add-card{border-style:dashed;border-color:var(--b);background:none}
+.desk-card.add-card:hover{border-color:var(--b2);transform:translateY(-1px)}
+.desk-svg{display:block;margin-bottom:2px}
+.desk-status{
+  position:absolute;top:12px;right:12px;
+  width:7px;height:7px;border-radius:50%;background:var(--green);
+}
 .desk-card-av{
-  width:26px;height:26px;border-radius:50%;
+  width:24px;height:24px;border-radius:50%;
   display:flex;align-items:center;justify-content:center;
-  font-size:11px;font-weight:700;color:#fff;margin-top:2px;
+  font-size:10px;font-weight:700;color:#fff;
 }
-.desk-card-name{font-size:13px;font-weight:600;color:var(--t)}
-.desk-card-client{font-size:11px;color:var(--m);line-height:1.3;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.desk-card-add-label{font-size:13px;color:var(--m)}
-.desk-card-plus{font-size:22px;color:var(--m2);line-height:1;margin-bottom:2px}
+.desk-card-name{font-size:13px;font-weight:600;color:var(--t);line-height:1.2}
+.desk-card-client{font-size:11px;color:var(--m);line-height:1.3;width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.desk-card-plus{font-size:20px;color:var(--m2);line-height:1;margin-top:6px;margin-bottom:2px}
+.desk-card-add-label{font-size:12px;color:var(--m2)}
+
+/* ── Chat panel (right side, over workspace) */
+.chat-panel-backdrop{
+  position:fixed;inset:0;z-index:40;
+  background:rgba(0,0,0,.4);
+  opacity:0;pointer-events:none;transition:opacity 0.2s ease;
+}
+.chat-panel-backdrop.open{opacity:1;pointer-events:auto}
+.chat-panel{
+  position:fixed;top:44px;right:0;bottom:0;
+  width:520px;max-width:100vw;
+  background:var(--s);border-left:1px solid var(--b);
+  z-index:41;display:flex;flex-direction:column;
+  transform:translateX(100%);transition:transform 0.22s cubic-bezier(.4,0,.2,1);
+}
+.chat-panel.open{transform:translateX(0)}
+.chat-panel-header{
+  display:flex;align-items:center;gap:10px;
+  padding:14px 16px;border-bottom:1px solid var(--b);flex-shrink:0;
+}
+.chat-panel-av{
+  width:30px;height:30px;border-radius:50%;
+  display:flex;align-items:center;justify-content:center;
+  font-size:12px;font-weight:700;color:#fff;flex-shrink:0;
+}
+.chat-panel-info{flex:1;min-width:0}
+.chat-panel-name{font-size:14px;font-weight:600;color:var(--t)}
+.chat-panel-meta{font-size:11px;color:var(--m);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.chat-panel-close{
+  width:26px;height:26px;border-radius:5px;background:none;
+  border:none;cursor:pointer;color:var(--m);
+  display:flex;align-items:center;justify-content:center;transition:all .15s;
+}
+.chat-panel-close:hover{background:var(--s2);color:var(--t)}
 </style>
 </head>
 <body>
@@ -475,43 +518,46 @@ html,body{height:100%;background:var(--bg);color:var(--t);font-family:-apple-sys
       <div class="logo-mark">A</div>
       <span class="logo-text">Agency OS</span>
     </div>
-    <div class="topbar-status">
-      <div class="status-dot" id="status-dot"></div>
-      <span id="status-text">Ready</span>
+    <div style="display:flex;align-items:center;gap:8px;margin-left:auto">
+      <button class="btn-secondary" style="padding:5px 12px;font-size:12px" onclick="openDrawer('reports')">Reports</button>
+      <button class="btn-primary" style="padding:5px 12px;font-size:12px" onclick="openCreateModal()">+ New Employee</button>
+      <div class="topbar-status" style="margin-left:6px">
+        <div class="status-dot" id="status-dot"></div>
+        <span id="status-text">Ready</span>
+      </div>
     </div>
   </div>
 
-  <!-- Body -->
-  <div class="body">
+  <!-- Desk floor (permanent main view) -->
+  <div class="desk-floor" id="desk-floor">
+    <div class="desk-floor-label">Your Team</div>
+    <div class="desk-grid" id="desk-grid"></div>
+  </div>
 
-    <!-- Sidebar -->
-    <div class="sidebar">
-      <div class="sidebar-section">Team</div>
-      <div class="emp-list" id="emp-list">
-        <!-- employees rendered here -->
-      </div>
-      <div class="sidebar-bottom">
-        <button class="sidebar-btn" onclick="openCreateModal()">
-          <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 1v12M1 7h12" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
-          New Employee
-        </button>
-        <button class="sidebar-btn" onclick="openDrawer('reports')">
-          <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="1" y="1" width="12" height="12" rx="2" stroke="currentColor" stroke-width="1.4"/><path d="M4 5h6M4 7.5h6M4 10h4" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
-          Reports
-        </button>
-      </div>
-    </div>
-
-    <!-- Main Workspace -->
-    <div class="workspace" id="workspace">
-      <div class="workspace-empty" id="no-employee-state">
-        <p>Select an employee from the sidebar, or create one to get started.</p>
-        <button class="btn-primary" onclick="openCreateModal()">+ New Employee</button>
-      </div>
-    </div>
-
-  </div><!-- /body -->
 </div><!-- /app -->
+
+<!-- Chat panel backdrop -->
+<div class="chat-panel-backdrop" id="chat-panel-backdrop" onclick="closeChatPanel()"></div>
+
+<!-- Chat panel -->
+<div class="chat-panel" id="chat-panel">
+  <div class="chat-panel-header" id="chat-panel-header"></div>
+  <div class="messages" id="messages"></div>
+  <div class="input-area">
+    <div id="api-error-banner" style="display:none"></div>
+    <div class="input-wrap">
+      <textarea id="msg-input" placeholder="Message..." rows="1" onkeydown="handleInputKey(event)" oninput="autoGrow(this)"></textarea>
+      <button class="send-btn" id="send-btn" onclick="sendMessage()">
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M1 13L13 7 1 1v4.5l8.5 1.5-8.5 1.5V13z" fill="white"/></svg>
+      </button>
+    </div>
+    <div class="tool-chips">
+      <button class="tool-chip" onclick="openDrawer('research')">🔍 Research</button>
+      <button class="tool-chip" onclick="openDrawer('concepts')">💡 Concepts</button>
+      <button class="tool-chip" onclick="openDrawer('images')">🎨 Images</button>
+    </div>
+  </div>
+</div>
 
 <!-- ── Create Employee Modal -->
 <div class="modal-backdrop" id="create-modal" onclick="handleModalBackdropClick(event)">
@@ -753,74 +799,79 @@ function selectEmployee(id) {
 
 // ── Workspace rendering
 
-function deskSVG() {
-  return `<svg class="desk-svg" width="72" height="50" viewBox="0 0 72 50" fill="none" xmlns="http://www.w3.org/2000/svg">
-    <rect x="1" y="16" width="70" height="32" rx="5" fill="#1a1a1a" stroke="#2e2e2e"/>
-    <rect x="22" y="4" width="28" height="18" rx="3" fill="#141420" stroke="#2a2a35"/>
-    <rect x="24" y="6" width="24" height="14" rx="2" fill="#0c0c18"/>
-    <rect x="31" y="21" width="10" height="3" fill="#222"/>
-    <rect x="13" y="31" width="46" height="10" rx="2" fill="#141414" stroke="#282828"/>
-    <ellipse cx="62" cy="27" rx="4" ry="5" fill="#141414" stroke="#282828"/>
+function deskSVG(color) {
+  return `<svg class="desk-svg" width="88" height="62" viewBox="0 0 88 62" fill="none">
+    <rect x="2" y="20" width="84" height="40" rx="6" fill="#161616" stroke="#272727"/>
+    <rect x="24" y="4" width="40" height="24" rx="4" fill="#111118" stroke="#2a2a38"/>
+    <rect x="26" y="6" width="36" height="20" rx="3" fill="#0a0a14"/>
+    <rect x="28" y="8" width="32" height="3" rx="1" fill="${color}22"/>
+    <rect x="40" y="27" width="8" height="4" rx="1" fill="#1c1c1c"/>
+    <rect x="16" y="38" width="56" height="15" rx="3" fill="#111" stroke="#242424"/>
+    <rect x="19" y="41" width="50" height="1.5" rx="1" fill="#1e1e1e"/>
+    <rect x="19" y="45" width="50" height="1.5" rx="1" fill="#1e1e1e"/>
+    <rect x="19" y="49" width="38" height="1.5" rx="1" fill="#1e1e1e"/>
+    <ellipse cx="79" cy="46" rx="4.5" ry="6" fill="#111" stroke="#242424"/>
+    <line x1="79" y1="40.5" x2="79" y2="51.5" stroke="#1e1e1e" stroke-width="1"/>
   </svg>`;
 }
 
-function renderWorkspace() {
-  const ws = document.getElementById('workspace');
-  if (!activeEmployeeId) {
-    if (employees.length === 0) {
-      ws.innerHTML = `<div class="workspace-empty">
-        <p>No employees yet. Create your first one to get started.</p>
-        <button class="btn-primary" onclick="openCreateModal()">+ New Employee</button>
-      </div>`;
-    } else {
-      ws.innerHTML = `<div class="desk-floor">
-        <div class="desk-floor-title">Your Team</div>
-        ${employees.map(emp => `
-          <div class="desk-card" onclick="selectEmployee('${emp.id}')">
-            ${deskSVG()}
-            <div class="desk-card-av" style="background:${emp.color}">${emp.name.charAt(0)}</div>
-            <div class="desk-card-name">${escHtml(emp.name)}</div>
-            <div class="desk-card-client">${escHtml(emp.client || emp.role)}</div>
-          </div>`).join('')}
-        <div class="desk-card add-card" onclick="openCreateModal()">
-          <div class="desk-card-plus">+</div>
-          <div class="desk-card-add-label">New Employee</div>
-        </div>
-      </div>`;
-    }
+function renderDeskFloor() {
+  const grid = document.getElementById('desk-grid');
+  if (!grid) return;
+  if (employees.length === 0) {
+    grid.innerHTML = `<div style="color:var(--m2);font-size:13px;padding:8px 0">
+      No employees yet — click <strong style="color:var(--m)">+ New Employee</strong> to get started.
+    </div>`;
     return;
   }
+  grid.innerHTML = employees.map(emp => `
+    <div class="desk-card${activeEmployeeId === emp.id ? ' active' : ''}" onclick="selectEmployee('${emp.id}')">
+      <div class="desk-status"></div>
+      ${deskSVG(emp.color)}
+      <div class="desk-card-av" style="background:${emp.color}">${emp.name.charAt(0).toUpperCase()}</div>
+      <div class="desk-card-name">${escHtml(emp.name)}</div>
+      <div class="desk-card-client">${escHtml(emp.client || emp.role)}</div>
+    </div>`).join('') +
+  `<div class="desk-card add-card" onclick="openCreateModal()">
+    <div class="desk-card-plus">+</div>
+    <div class="desk-card-add-label">New Employee</div>
+  </div>`;
+}
+
+function selectEmployee(id) {
+  activeEmployeeId = id;
+  renderDeskFloor();
+  openChatPanel();
+}
+
+function openChatPanel() {
   const emp = employees.find(e => e.id === activeEmployeeId);
   if (!emp) return;
-  ws.innerHTML = `
-    <div class="emp-header">
-      <div class="emp-header-avatar" style="background:${emp.color}">${emp.name.charAt(0).toUpperCase()}</div>
-      <div class="emp-header-info">
-        <div class="emp-header-name">${escHtml(emp.name)}</div>
-        <div class="emp-header-meta">${escHtml(emp.role)}${emp.client ? ' · ' + escHtml(emp.client) : ''}</div>
-      </div>
+  // Render header
+  document.getElementById('chat-panel-header').innerHTML = `
+    <div class="chat-panel-av" style="background:${emp.color}">${emp.name.charAt(0).toUpperCase()}</div>
+    <div class="chat-panel-info">
+      <div class="chat-panel-name">${escHtml(emp.name)}</div>
+      <div class="chat-panel-meta">${escHtml(emp.role)}${emp.client ? ' · ' + escHtml(emp.client) : ''}</div>
     </div>
-    <div class="messages" id="messages"></div>
-    <div class="input-area">
-      <div id="api-error-banner" style="display:none"></div>
-      <div class="input-wrap">
-        <textarea id="msg-input" placeholder="Message ${escHtml(emp.name)}..." rows="1" onkeydown="handleInputKey(event)" oninput="autoGrow(this)"></textarea>
-        <button class="send-btn" id="send-btn" onclick="sendMessage()">
-          <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M1 13L13 7 1 1v4.5l8.5 1.5-8.5 1.5V13z" fill="white"/></svg>
-        </button>
-      </div>
-      <div class="tool-chips">
-        <button class="tool-chip" onclick="openDrawer('research')">🔍 Research</button>
-        <button class="tool-chip" onclick="openDrawer('concepts')">💡 Concepts</button>
-        <button class="tool-chip" onclick="openDrawer('images')">🎨 Images</button>
-      </div>
-    </div>
-  `;
+    <button class="chat-panel-close" onclick="closeChatPanel()">
+      <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M1 1l10 10M11 1L1 11" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+    </button>`;
+  // Update input placeholder
+  const inp = document.getElementById('msg-input');
+  if (inp) inp.placeholder = `Message ${emp.name}...`;
+  // Open
+  document.getElementById('chat-panel-backdrop').classList.add('open');
+  document.getElementById('chat-panel').classList.add('open');
   renderMessages();
-  setTimeout(() => {
-    const inp = document.getElementById('msg-input');
-    if (inp) inp.focus();
-  }, 50);
+  setTimeout(() => { if (inp) inp.focus(); }, 100);
+}
+
+function closeChatPanel() {
+  activeEmployeeId = null;
+  document.getElementById('chat-panel-backdrop').classList.remove('open');
+  document.getElementById('chat-panel').classList.remove('open');
+  renderDeskFloor();
 }
 
 function renderMessages() {
@@ -1386,12 +1437,12 @@ document.addEventListener('keydown', e => {
   if (e.key === 'Escape') {
     closeCreateModal();
     closeDrawer();
+    closeChatPanel();
   }
 });
 
 loadEmployees();
-renderSidebar();
-renderWorkspace();
+renderDeskFloor();
 </script>
 </body>
 </html>
