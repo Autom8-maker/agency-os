@@ -14,9 +14,11 @@
     "@supabase/supabase-js": "^2.47.10",
     "langchain": "^0.3.17",
     "next": "14.2.18",
-    "puppeteer": "^22.15.0",
     "react": "^18",
     "react-dom": "^18"
+  },
+  "optionalDependencies": {
+    "puppeteer": "^22.15.0"
   },
   "devDependencies": {
     "@types/node": "^20",
