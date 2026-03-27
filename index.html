@@ -1,0 +1,1084 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Agency OS</title>
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#080810;--floor:#0d0d18;--wall:#111122;
+  --card:#14141f;--card2:#1a1a2e;--border:#252538;--border2:#363655;
+  --accent:#7c5cfc;--accent2:#a78bfa;--accent3:#c4b5fd;
+  --green:#22d3a0;--red:#f87171;--amber:#fbbf24;--blue:#60a5fa;
+  --text:#f0f0ff;--muted:#8888aa;--muted2:#55556a;
+  --glow:rgba(124,92,252,0.3);
+}
+html,body{height:100%;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:14px;line-height:1.5;overflow:hidden}
+
+/* ── App shell ───────────────────────────── */
+.app{display:flex;flex-direction:column;height:100vh}
+
+/* ── Topbar ──────────────────────────────── */
+.topbar{
+  display:flex;align-items:center;gap:12px;
+  padding:0 20px;height:48px;min-height:48px;
+  background:var(--wall);border-bottom:1px solid var(--border);
+  z-index:10;
+}
+.logo{display:flex;align-items:center;gap:9px}
+.logo-gem{
+  width:26px;height:26px;background:linear-gradient(135deg,var(--accent),var(--blue));
+  border-radius:7px;display:flex;align-items:center;justify-content:center;
+  font-size:13px;font-weight:900;color:#fff;flex-shrink:0;
+}
+.logo-name{font-size:14px;font-weight:700;letter-spacing:.06em;text-transform:uppercase}
+.logo-phase{font-size:10px;color:var(--muted2);letter-spacing:.04em;margin-left:2px}
+.topbar-pills{display:flex;gap:6px;margin-left:16px}
+.pill{
+  padding:4px 11px;border-radius:20px;font-size:11px;font-weight:600;
+  cursor:pointer;border:1px solid var(--border2);color:var(--muted);
+  background:var(--card);transition:all .15s;letter-spacing:.03em;
+}
+.pill:hover{border-color:var(--accent);color:var(--accent3)}
+.pill.active{background:rgba(124,92,252,.2);border-color:var(--accent);color:var(--accent3)}
+.topbar-right{margin-left:auto;display:flex;align-items:center;gap:10px}
+.status{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--muted)}
+.dot{width:7px;height:7px;border-radius:50%;background:var(--green);box-shadow:0 0 8px var(--green);transition:all .3s}
+.dot.thinking{background:var(--amber);box-shadow:0 0 8px var(--amber);animation:pulse 1s infinite}
+.dot.err{background:var(--red);box-shadow:0 0 8px var(--red)}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+
+/* ── Views ───────────────────────────────── */
+.view{flex:1;display:none;overflow:hidden}
+.view.active{display:flex}
+
+/* ══════════════════════════════════════════
+   OFFICE VIEW
+══════════════════════════════════════════ */
+#view-office{flex-direction:column;position:relative}
+
+.office-scene{
+  flex:1;position:relative;overflow:hidden;
+  background:var(--floor);
+  background-image:
+    linear-gradient(rgba(124,92,252,.04) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(124,92,252,.04) 1px,transparent 1px);
+  background-size:40px 40px;
+}
+
+/* corner glow from character */
+.office-scene::after{
+  content:'';position:absolute;
+  top:50%;left:50%;transform:translate(-50%,-50%);
+  width:400px;height:400px;
+  background:radial-gradient(circle,rgba(124,92,252,.08) 0%,transparent 70%);
+  pointer-events:none;
+}
+
+/* ── Stations ────────────────────────────── */
+.station{
+  position:absolute;cursor:pointer;
+  background:var(--card);border:1px solid var(--border);
+  border-radius:14px;padding:16px;
+  display:flex;flex-direction:column;gap:8px;
+  transition:all .2s;user-select:none;
+  min-width:160px;
+}
+.station:hover{border-color:var(--accent);background:var(--card2);transform:translateY(-2px);box-shadow:0 8px 24px rgba(0,0,0,.4),0 0 0 1px rgba(124,92,252,.2)}
+.station-icon{font-size:24px;line-height:1}
+.station-name{font-size:12px;font-weight:700;color:var(--text);letter-spacing:.04em;text-transform:uppercase}
+.station-desc{font-size:11px;color:var(--muted2);line-height:1.4}
+.station-shortcut{
+  margin-top:4px;font-size:10px;color:var(--accent);font-weight:600;
+  background:rgba(124,92,252,.1);padding:2px 7px;border-radius:4px;
+  width:fit-content;letter-spacing:.04em;
+}
+
+/* Station positions */
+#stn-research{top:12%;left:5%}
+#stn-strategy{top:12%;right:5%}
+#stn-creative{bottom:16%;right:5%}
+#stn-reports{bottom:16%;left:5%}
+#stn-images{bottom:16%;left:50%;transform:translateX(-50%)}
+
+/* ── Character ───────────────────────────── */
+.character-wrap{
+  position:absolute;top:50%;left:50%;transform:translate(-50%,-58%);
+  display:flex;flex-direction:column;align-items:center;gap:0;
+  z-index:5;
+}
+
+/* Desk */
+.desk{
+  width:220px;height:110px;
+  background:linear-gradient(180deg,#1e1b3a 0%,#161328 100%);
+  border:1px solid #2d2a55;border-radius:12px;
+  position:relative;display:flex;align-items:center;justify-content:center;
+  box-shadow:0 12px 32px rgba(0,0,0,.6),inset 0 1px 0 rgba(255,255,255,.05);
+}
+.desk::before{/* monitor */
+  content:'🖥️';font-size:36px;position:absolute;top:-20px;left:50%;transform:translateX(-50%);
+}
+.monitor-glow{
+  position:absolute;top:-28px;left:50%;transform:translateX(-50%);
+  width:60px;height:20px;
+  background:radial-gradient(ellipse,rgba(96,165,250,.3),transparent);
+  filter:blur(8px);
+}
+.keyboard{
+  position:absolute;bottom:10px;left:50%;transform:translateX(-50%);
+  width:90px;height:14px;background:#0f0e1f;border:1px solid #2a2845;
+  border-radius:3px;
+  background-image:repeating-linear-gradient(90deg,#2a2845 0px,#2a2845 6px,transparent 6px,transparent 8px);
+}
+
+/* Character figure */
+.ace{
+  position:absolute;bottom:24px;left:50%;transform:translateX(-50%);
+  display:flex;flex-direction:column;align-items:center;gap:0;
+  animation:idle 3s ease-in-out infinite;
+}
+@keyframes idle{0%,100%{transform:translateX(-50%) translateY(0)}50%{transform:translateX(-50%) translateY(-3px)}}
+.ace.working{animation:typing 0.4s ease-in-out infinite alternate}
+@keyframes typing{0%{transform:translateX(-50%) translateY(0)}100%{transform:translateX(-50%) translateY(-4px)}}
+.ace-head{
+  width:28px;height:28px;border-radius:50%;
+  background:linear-gradient(135deg,#f4c07a,#e8956d);
+  border:2px solid rgba(255,255,255,.15);
+  display:flex;align-items:center;justify-content:center;
+  font-size:13px;line-height:1;position:relative;
+}
+.ace-eyes{font-size:8px;letter-spacing:2px;margin-top:2px}
+.ace-body{
+  width:36px;height:30px;
+  background:linear-gradient(180deg,var(--accent) 0%,#5b3fd4 100%);
+  border-radius:8px 8px 4px 4px;
+  margin-top:-2px;
+  box-shadow:0 4px 12px rgba(124,92,252,.4);
+}
+
+/* Speech bubble */
+.speech{
+  position:absolute;top:-68px;left:50%;transform:translateX(-50%);
+  background:var(--card2);border:1px solid var(--border2);
+  border-radius:12px;padding:8px 14px;
+  font-size:12px;color:var(--text);white-space:nowrap;
+  box-shadow:0 4px 16px rgba(0,0,0,.4);
+  transition:all .3s;
+  max-width:260px;white-space:normal;text-align:center;line-height:1.4;
+}
+.speech::after{
+  content:'';position:absolute;bottom:-7px;left:50%;transform:translateX(-50%);
+  width:12px;height:7px;
+  background:var(--card2);
+  clip-path:polygon(0 0,100% 0,50% 100%);
+}
+.speech.working{border-color:var(--accent);background:rgba(124,92,252,.15);color:var(--accent3)}
+.speech .speech-dots{display:inline-flex;gap:3px;align-items:center;vertical-align:middle;margin-left:4px}
+.speech .speech-dots span{width:4px;height:4px;border-radius:50%;background:var(--accent);animation:sdot .8s infinite}
+.speech .speech-dots span:nth-child(2){animation-delay:.15s}
+.speech .speech-dots span:nth-child(3){animation-delay:.3s}
+@keyframes sdot{0%,60%,100%{opacity:.3;transform:scale(.8)}30%{opacity:1;transform:scale(1)}}
+
+/* ── Chat bar ─────────────────────────────── */
+.chat-bar{
+  padding:12px 20px 14px;
+  background:var(--wall);border-top:1px solid var(--border);
+  display:flex;gap:10px;align-items:flex-end;
+}
+.input-wrap{
+  flex:1;background:var(--card);border:1px solid var(--border);
+  border-radius:12px;padding:10px 14px;
+  display:flex;align-items:flex-end;gap:10px;
+  transition:border-color .15s;
+}
+.input-wrap:focus-within{border-color:var(--accent);box-shadow:0 0 0 3px rgba(124,92,252,.1)}
+#main-input{
+  flex:1;background:none;border:none;outline:none;
+  color:var(--text);font-size:14px;font-family:inherit;
+  resize:none;min-height:24px;max-height:120px;line-height:1.5;
+}
+#main-input::placeholder{color:var(--muted2)}
+.send-btn{
+  width:34px;height:34px;border-radius:9px;
+  background:linear-gradient(135deg,var(--accent),#5b3fd4);
+  border:none;cursor:pointer;color:#fff;font-size:16px;
+  display:flex;align-items:center;justify-content:center;
+  flex-shrink:0;transition:all .15s;box-shadow:0 2px 8px rgba(124,92,252,.4);
+}
+.send-btn:hover{transform:translateY(-1px);box-shadow:0 4px 14px rgba(124,92,252,.5)}
+.send-btn:disabled{opacity:.4;pointer-events:none}
+
+/* ══════════════════════════════════════════
+   PANELS (slide-in from right)
+══════════════════════════════════════════ */
+.panel-overlay{
+  position:fixed;inset:0;background:rgba(0,0,0,.5);
+  z-index:50;opacity:0;pointer-events:none;transition:opacity .25s;
+}
+.panel-overlay.open{opacity:1;pointer-events:all}
+.panel{
+  position:fixed;top:0;right:0;bottom:0;width:640px;max-width:95vw;
+  background:var(--wall);border-left:1px solid var(--border);
+  z-index:51;display:flex;flex-direction:column;
+  transform:translateX(100%);transition:transform .3s cubic-bezier(.4,0,.2,1);
+}
+.panel-overlay.open .panel{transform:translateX(0)}
+
+.panel-header{
+  padding:18px 20px 16px;border-bottom:1px solid var(--border);
+  display:flex;align-items:center;gap:12px;
+}
+.panel-icon{font-size:22px}
+.panel-title{font-size:16px;font-weight:700;flex:1}
+.panel-close{
+  width:30px;height:30px;border-radius:7px;
+  background:var(--card);border:1px solid var(--border);
+  cursor:pointer;color:var(--muted);font-size:16px;
+  display:flex;align-items:center;justify-content:center;
+  transition:all .15s;
+}
+.panel-close:hover{color:var(--text);border-color:var(--border2)}
+.panel-body{flex:1;overflow-y:auto;padding:20px}
+.panel-body::-webkit-scrollbar{width:5px}
+.panel-body::-webkit-scrollbar-thumb{background:var(--border2);border-radius:3px}
+
+/* ── Chat history (inside panel) ──────────── */
+.chat-history{display:flex;flex-direction:column;gap:2px;margin-bottom:20px}
+.msg{display:flex;gap:12px;padding:10px 0}
+.msg-av{width:30px;height:30px;border-radius:8px;flex-shrink:0;margin-top:2px;display:flex;align-items:center;justify-content:center;font-size:14px}
+.msg.user .msg-av{background:linear-gradient(135deg,#4f46e5,var(--accent))}
+.msg.ace-msg .msg-av{background:linear-gradient(135deg,#0f0e1f,#1a1830);border:1px solid var(--border2)}
+.msg-content{flex:1;min-width:0}
+.msg-name{font-size:11px;font-weight:700;color:var(--muted);margin-bottom:4px;letter-spacing:.03em}
+.msg.user .msg-name{color:var(--accent3)}
+.msg-text{color:var(--text);line-height:1.7}
+.msg-text p{margin-bottom:8px}.msg-text p:last-child{margin-bottom:0}
+.msg-text h1,.msg-text h2,.msg-text h3{margin:12px 0 6px;font-weight:700}
+.msg-text h3{font-size:14px}
+.msg-text ul,.msg-text ol{padding-left:18px;margin:6px 0}
+.msg-text li{margin-bottom:3px}
+.msg-text code{background:rgba(124,92,252,.15);border:1px solid rgba(124,92,252,.2);border-radius:4px;padding:1px 5px;font-size:12px;color:var(--accent3);font-family:'SF Mono','Fira Code',monospace}
+.msg-text pre{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:12px;margin:8px 0;overflow-x:auto}
+.msg-text pre code{background:none;border:none;padding:0;color:#e2e8f0}
+.msg-text table{border-collapse:collapse;width:100%;margin:8px 0;font-size:13px}
+.msg-text th{background:rgba(124,92,252,.1);padding:7px 10px;border:1px solid var(--border);font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--accent3)}
+.msg-text td{padding:6px 10px;border:1px solid var(--border)}
+.msg-text strong{color:var(--text)}
+.msg-text blockquote{border-left:3px solid var(--accent);padding-left:12px;color:var(--muted);margin:8px 0}
+.typing-indicator{display:flex;gap:4px;align-items:center;padding:4px 0}
+.typing-indicator span{width:6px;height:6px;border-radius:50%;background:var(--muted2);animation:tdot 1.2s infinite}
+.typing-indicator span:nth-child(2){animation-delay:.2s}
+.typing-indicator span:nth-child(3){animation-delay:.4s}
+@keyframes tdot{0%,60%,100%{transform:translateY(0)}30%{transform:translateY(-5px)}}
+
+/* ── Scraper panel ────────────────────────── */
+.scraper-form{display:flex;gap:10px;margin-bottom:16px}
+.scraper-input{
+  flex:1;background:var(--card);border:1px solid var(--border);
+  border-radius:9px;padding:10px 14px;color:var(--text);
+  font-size:14px;font-family:inherit;outline:none;transition:border-color .15s;
+}
+.scraper-input:focus{border-color:var(--accent)}
+.btn{
+  display:inline-flex;align-items:center;gap:7px;
+  padding:9px 18px;border-radius:9px;border:none;
+  font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;transition:all .15s;
+}
+.btn-primary{background:linear-gradient(135deg,var(--accent),#5b3fd4);color:#fff;box-shadow:0 2px 8px rgba(124,92,252,.3)}
+.btn-primary:hover{box-shadow:0 4px 16px rgba(124,92,252,.5);transform:translateY(-1px)}
+.btn-primary:disabled{opacity:.5;pointer-events:none;transform:none}
+.btn-ghost{background:var(--card);border:1px solid var(--border);color:var(--muted)}
+.btn-ghost:hover{border-color:var(--border2);color:var(--text)}
+
+.terminal{
+  background:#050508;border:1px solid var(--border);border-radius:10px;
+  padding:14px;font-family:'SF Mono','Fira Code',monospace;font-size:12px;
+  min-height:120px;max-height:280px;overflow-y:auto;line-height:1.7;
+  color:#8888aa;
+}
+.terminal::-webkit-scrollbar{width:4px}
+.terminal::-webkit-scrollbar-thumb{background:var(--border2)}
+.terminal .t-log{color:#a0f0c0}
+.terminal .t-err{color:#f87171}
+.terminal .t-start{color:var(--accent3);font-weight:600}
+.terminal .t-done{color:var(--green);font-weight:600}
+
+.reports-list{display:flex;flex-direction:column;gap:8px}
+.report-item{
+  display:flex;align-items:center;gap:12px;
+  background:var(--card);border:1px solid var(--border);
+  border-radius:9px;padding:12px 16px;cursor:pointer;transition:all .15s;
+}
+.report-item:hover,.report-item.active{border-color:var(--accent);background:rgba(124,92,252,.08)}
+.ri-info{flex:1}
+.ri-name{font-size:13px;font-weight:600;color:var(--text);margin-bottom:2px}
+.ri-date{font-size:11px;color:var(--muted2)}
+.ri-del{color:var(--muted2);cursor:pointer;padding:4px;border-radius:4px;transition:color .15s;font-size:16px}
+.ri-del:hover{color:var(--red)}
+.report-view{margin-top:16px;background:var(--card);border:1px solid var(--border);border-radius:12px;padding:24px;line-height:1.8}
+.report-view h1{font-size:20px;font-weight:800;margin-bottom:14px;padding-bottom:12px;border-bottom:1px solid var(--border)}
+.report-view h2{font-size:16px;font-weight:700;margin:20px 0 8px;color:var(--text)}
+.report-view h3{font-size:14px;font-weight:600;margin:14px 0 6px;color:var(--accent3)}
+.report-view h4{font-size:13px;font-weight:600;margin:12px 0 4px;color:var(--muted)}
+.report-view p{color:var(--muted);margin-bottom:8px}
+.report-view ul,.report-view ol{padding-left:18px;margin:6px 0}
+.report-view li{margin-bottom:4px;color:var(--muted)}
+.report-view strong{color:var(--text)}
+.report-view table{border-collapse:collapse;width:100%;margin:10px 0;font-size:13px}
+.report-view th{background:rgba(124,92,252,.1);padding:7px 12px;border:1px solid var(--border);font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--accent3)}
+.report-view td{padding:7px 12px;border:1px solid var(--border)}
+.report-view hr{border:none;border-top:1px solid var(--border);margin:18px 0}
+.report-view code{background:rgba(124,92,252,.1);border:1px solid rgba(124,92,252,.2);border-radius:4px;padding:1px 5px;font-size:12px;color:var(--accent3)}
+.report-view blockquote{border-left:3px solid var(--accent);padding-left:12px;color:var(--muted2);margin:10px 0;font-style:italic}
+
+/* ── Concepts form ────────────────────────── */
+.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px}
+.field{display:flex;flex-direction:column;gap:5px}
+.field.full{grid-column:1/-1}
+.field label{font-size:10px;font-weight:700;color:var(--muted);letter-spacing:.07em;text-transform:uppercase}
+.field input,.field textarea,.field select{
+  background:var(--card);border:1px solid var(--border);border-radius:8px;
+  padding:9px 12px;color:var(--text);font-size:13px;font-family:inherit;outline:none;transition:border-color .15s;
+}
+.field input:focus,.field textarea:focus,.field select:focus{border-color:var(--accent)}
+.field textarea{resize:vertical;min-height:70px;line-height:1.5}
+.field select option{background:var(--card)}
+
+.concept-card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:18px;margin-bottom:12px;transition:border-color .15s}
+.concept-card:hover{border-color:var(--accent)}
+.cn{font-size:10px;font-weight:700;color:var(--accent);letter-spacing:.08em;text-transform:uppercase;margin-bottom:8px}
+.ct{font-size:15px;font-weight:700;margin-bottom:12px}
+.cr{display:flex;gap:10px;margin-bottom:6px;font-size:13px}
+.cl{color:var(--muted2);min-width:65px;font-size:10px;text-transform:uppercase;font-weight:700;letter-spacing:.05em;padding-top:1px;flex-shrink:0}
+.cv{color:var(--muted);flex:1;line-height:1.5}
+.score-row{display:flex;align-items:center;gap:8px}
+.score-bar{width:80px;height:4px;background:var(--border);border-radius:2px;overflow:hidden}
+.score-fill{height:100%;background:linear-gradient(90deg,var(--accent),var(--accent3));border-radius:2px}
+
+/* ── Image gen panel ──────────────────────── */
+.img-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px;margin-top:16px}
+.img-card{
+  background:var(--card);border:1px solid var(--border);border-radius:10px;
+  overflow:hidden;cursor:pointer;transition:all .15s;
+}
+.img-card:hover{border-color:var(--accent);transform:translateY(-2px)}
+.img-card img{width:100%;aspect-ratio:1;object-fit:cover;display:block}
+.img-card-info{padding:10px 12px}
+.img-card-label{font-size:11px;color:var(--muted2);line-height:1.3}
+.img-dl{
+  display:block;text-align:center;padding:6px;
+  font-size:11px;color:var(--accent);font-weight:600;
+  border-top:1px solid var(--border);transition:background .15s;
+  text-decoration:none;
+}
+.img-dl:hover{background:rgba(124,92,252,.1)}
+.img-loading{
+  width:100%;aspect-ratio:1;background:var(--card2);
+  display:flex;align-items:center;justify-content:center;
+  flex-direction:column;gap:8px;color:var(--muted2);font-size:12px;
+}
+.spinner{width:24px;height:24px;border:2px solid var(--border2);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* ══════════════════════════════════════════
+   CHAT VIEW (full screen history)
+══════════════════════════════════════════ */
+#view-chat{flex-direction:column}
+#view-chat .chat-full{flex:1;overflow-y:auto;padding:20px 0}
+#view-chat .chat-full::-webkit-scrollbar{width:5px}
+#view-chat .chat-full::-webkit-scrollbar-thumb{background:var(--border2);border-radius:3px}
+.chat-full .msg{padding:10px 28px}
+.chat-empty-state{
+  flex:1;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;padding:40px 20px;gap:20px;
+}
+.ces-icon{font-size:44px}
+.ces-title{font-size:20px;font-weight:700}
+.ces-sub{font-size:13px;color:var(--muted);text-align:center;max-width:380px;line-height:1.7}
+.suggestions{display:flex;flex-direction:column;gap:8px;width:100%;max-width:480px}
+.sug{
+  background:var(--card);border:1px solid var(--border);border-radius:10px;
+  padding:11px 16px;cursor:pointer;transition:all .15s;
+}
+.sug:hover{border-color:var(--accent);background:rgba(124,92,252,.07)}
+.sug strong{display:block;color:var(--text);font-size:13px;margin-bottom:2px}
+.sug span{font-size:12px;color:var(--muted)}
+
+/* ── Toast ───────────────────────────────── */
+.toast{
+  position:fixed;bottom:20px;right:20px;
+  background:var(--card2);border:1px solid var(--border2);
+  border-radius:9px;padding:10px 16px;font-size:13px;color:var(--text);
+  box-shadow:0 8px 24px rgba(0,0,0,.5);
+  transform:translateY(20px);opacity:0;
+  transition:all .25s;pointer-events:none;z-index:999;
+}
+.toast.show{transform:translateY(0);opacity:1}
+</style>
+</head>
+<body>
+<div class="app">
+
+<!-- ── Topbar ───────────────────────────────────── -->
+<div class="topbar">
+  <div class="logo">
+    <div class="logo-gem">A</div>
+    <div>
+      <span class="logo-name">Agency OS</span>
+      <span class="logo-phase"> · Phase 1</span>
+    </div>
+  </div>
+  <div class="topbar-pills">
+    <div class="pill active" onclick="switchView('office')" id="pill-office">🏢 Office</div>
+    <div class="pill" onclick="switchView('chat')" id="pill-chat">✦ Chat</div>
+  </div>
+  <div class="topbar-right">
+    <div class="status">
+      <div class="dot" id="status-dot"></div>
+      <span id="status-text">Ready</span>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════
+     OFFICE VIEW
+═══════════════════════════════════════ -->
+<div class="view active" id="view-office">
+  <div class="office-scene">
+
+    <!-- Stations -->
+    <div class="station" id="stn-research" onclick="openPanel('research')">
+      <div class="station-icon">🔍</div>
+      <div class="station-name">Competitor Intel</div>
+      <div class="station-desc">Scrape Meta Ad Library for any niche</div>
+      <div class="station-shortcut">Run Scraper</div>
+    </div>
+
+    <div class="station" id="stn-strategy" onclick="openPanel('concepts')">
+      <div class="station-icon">💡</div>
+      <div class="station-name">Ad Concepts</div>
+      <div class="station-desc">Generate hooks, angles &amp; ad copy</div>
+      <div class="station-shortcut">Generate</div>
+    </div>
+
+    <div class="station" id="stn-creative" onclick="openPanel('images')">
+      <div class="station-icon">🎨</div>
+      <div class="station-name">Creative Studio</div>
+      <div class="station-desc">Generate ad images with AI</div>
+      <div class="station-shortcut">Generate Images</div>
+    </div>
+
+    <div class="station" id="stn-reports" onclick="openPanel('reports')">
+      <div class="station-icon">📊</div>
+      <div class="station-name">Reports</div>
+      <div class="station-desc">View all intelligence reports</div>
+      <div class="station-shortcut">View Reports</div>
+    </div>
+
+    <!-- Character + Desk -->
+    <div class="character-wrap">
+      <div class="speech" id="speech-bubble">
+        Hey! Click a station or tell me what to do below.
+      </div>
+      <div class="desk">
+        <div class="monitor-glow"></div>
+        <div class="ace" id="ace">
+          <div class="ace-head">
+            <div class="ace-eyes">· ·</div>
+          </div>
+          <div class="ace-body"></div>
+        </div>
+        <div class="keyboard"></div>
+      </div>
+    </div>
+
+  </div><!-- /office-scene -->
+
+  <!-- Chat bar -->
+  <div class="chat-bar">
+    <div class="input-wrap">
+      <textarea id="main-input" placeholder="Tell Ace what to do... e.g. 'Research lakeland dentists' or 'Write 5 hooks for a roofing company'" rows="1"
+        onkeydown="handleMainKey(event)" oninput="autoResize(this)"></textarea>
+      <button class="send-btn" id="main-send" onclick="handleMainCommand()">↑</button>
+    </div>
+  </div>
+</div><!-- /view-office -->
+
+<!-- ═══════════════════════════════════════
+     CHAT VIEW
+═══════════════════════════════════════ -->
+<div class="view" id="view-chat">
+  <div id="chat-container" class="chat-full">
+    <div class="chat-empty-state" id="chat-empty">
+      <div class="ces-icon">✦</div>
+      <div class="ces-title">Ace is ready</div>
+      <div class="ces-sub">Your agency AI operator. Ask about strategy, copy, hooks, market research — anything.</div>
+      <div class="suggestions">
+        <div class="sug" onclick="useSuggestion(this)">
+          <strong>Competitor Breakdown</strong>
+          <span>What hooks are working best in the weight loss niche right now?</span>
+        </div>
+        <div class="sug" onclick="useSuggestion(this)">
+          <strong>Hook Writing</strong>
+          <span>Write 10 scroll-stopping hooks for a roofing company targeting homeowners after storms</span>
+        </div>
+        <div class="sug" onclick="useSuggestion(this)">
+          <strong>Offer Strategy</strong>
+          <span>What offer structure converts best for local service businesses running Meta ads?</span>
+        </div>
+        <div class="sug" onclick="useSuggestion(this)">
+          <strong>Ad Angle Analysis</strong>
+          <span>Give me 5 untapped angles for a local dental practice — avoid the generic "perfect smile" angle</span>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="chat-bar">
+    <div class="input-wrap">
+      <textarea id="chat-input" placeholder="Ask Ace anything..." rows="1"
+        onkeydown="handleChatKey(event)" oninput="autoResize(this)"></textarea>
+      <button class="send-btn" id="chat-send" onclick="sendChatMessage()">↑</button>
+    </div>
+  </div>
+</div><!-- /view-chat -->
+
+<!-- ═══════════════════════════════════════
+     PANELS
+═══════════════════════════════════════ -->
+
+<!-- Research Panel -->
+<div class="panel-overlay" id="panel-research" onclick="closePanelOnOverlay(event,'panel-research')">
+  <div class="panel" onclick="e=>e.stopPropagation()">
+    <div class="panel-header">
+      <div class="panel-icon">🔍</div>
+      <div class="panel-title">Competitor Intelligence</div>
+      <div class="panel-close" onclick="closePanel('research')">✕</div>
+    </div>
+    <div class="panel-body">
+      <p style="color:var(--muted);font-size:13px;margin-bottom:14px">Enter a niche or keyword. Ace will scrape the Meta Ad Library and analyze every ad with Claude.</p>
+      <div class="scraper-form">
+        <input class="scraper-input" id="scraper-query" placeholder="e.g. lakeland dentist, weight loss, roofing florida" onkeydown="if(event.key==='Enter')runScraper()"/>
+        <button class="btn btn-primary" id="scraper-btn" onclick="runScraper()">▶ Run</button>
+      </div>
+      <div class="terminal" id="scraper-terminal" style="display:none"></div>
+      <div id="scraper-result" style="margin-top:12px"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Reports Panel -->
+<div class="panel-overlay" id="panel-reports" onclick="closePanelOnOverlay(event,'panel-reports')">
+  <div class="panel" onclick="e=>e.stopPropagation()">
+    <div class="panel-header">
+      <div class="panel-icon">📊</div>
+      <div class="panel-title">Reports Library</div>
+      <div class="panel-close" onclick="closePanel('reports')">✕</div>
+    </div>
+    <div class="panel-body">
+      <div id="reports-content">
+        <p style="color:var(--muted);font-size:13px">Loading reports...</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Concepts Panel -->
+<div class="panel-overlay" id="panel-concepts" onclick="closePanelOnOverlay(event,'panel-concepts')">
+  <div class="panel" onclick="e=>e.stopPropagation()">
+    <div class="panel-header">
+      <div class="panel-icon">💡</div>
+      <div class="panel-title">Ad Concept Generator</div>
+      <div class="panel-close" onclick="closePanel('concepts')">✕</div>
+    </div>
+    <div class="panel-body">
+      <div class="form-grid">
+        <div class="field"><label>Niche / Industry</label><input id="cn-niche" placeholder="e.g. roofing contractor, weight loss, dentist"/></div>
+        <div class="field"><label>Target Audience</label><input id="cn-audience" placeholder="e.g. homeowners 35-55 in Florida"/></div>
+        <div class="field"><label>Offer</label><input id="cn-offer" placeholder="e.g. free roof inspection, $99 whitening"/></div>
+        <div class="field"><label>Tone</label>
+          <select id="cn-tone">
+            <option value="direct">Direct &amp; Bold</option>
+            <option value="empathetic">Empathetic &amp; Warm</option>
+            <option value="authoritative">Authoritative &amp; Expert</option>
+            <option value="curiosity">Curiosity-Driven</option>
+            <option value="urgent">Urgent &amp; FOMO</option>
+          </select>
+        </div>
+        <div class="field full"><label>Context / Pain Points (optional)</label><textarea id="cn-context" placeholder="e.g. Homeowners don't know if they need a new roof. They've been burned by shady contractors..."></textarea></div>
+      </div>
+      <button class="btn btn-primary" id="concepts-btn" onclick="generateConcepts()"><span>✦</span> Generate 5 Concepts</button>
+      <div id="concepts-output" style="margin-top:20px"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Images Panel -->
+<div class="panel-overlay" id="panel-images" onclick="closePanelOnOverlay(event,'panel-images')">
+  <div class="panel" onclick="e=>e.stopPropagation()">
+    <div class="panel-header">
+      <div class="panel-icon">🎨</div>
+      <div class="panel-title">Creative Studio</div>
+      <div class="panel-close" onclick="closePanel('images')">✕</div>
+    </div>
+    <div class="panel-body">
+      <p style="color:var(--muted);font-size:13px;margin-bottom:14px">Describe the ad creative you want. Ace will turn it into a professional prompt and generate the image.</p>
+      <div class="form-grid">
+        <div class="field full"><label>What do you need?</label><textarea id="img-brief" placeholder="e.g. Facebook ad for a roofing company — show a storm-damaged roof being repaired by professional crew, dramatic sky, trust and safety feeling" style="min-height:80px"></textarea></div>
+        <div class="field"><label>Format</label>
+          <select id="img-format">
+            <option value="1200x628">Feed Ad (1200×628)</option>
+            <option value="1080x1080">Square (1080×1080)</option>
+            <option value="1080x1920">Story/Reel (1080×1920)</option>
+          </select>
+        </div>
+        <div class="field"><label>Style</label>
+          <select id="img-style">
+            <option value="photorealistic, professional advertising photography">Photorealistic</option>
+            <option value="clean modern illustration, flat design">Illustration</option>
+            <option value="bold graphic design, striking colors">Bold Graphic</option>
+            <option value="cinematic, dramatic lighting">Cinematic</option>
+          </select>
+        </div>
+      </div>
+      <button class="btn btn-primary" id="img-btn" onclick="generateImages()"><span>🎨</span> Generate Images</button>
+      <div class="img-grid" id="img-output"></div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+marked.setOptions({ breaks: true, gfm: true });
+
+// ── State ─────────────────────────────────────────────────────────────
+let chatMessages = [];
+let aceState = 'idle'; // idle | working
+
+const SYSTEM = `You are Ace — an elite AI operator for a performance advertising agency. You think like a veteran media buyer, direct response copywriter, and marketing strategist combined.
+
+Your expertise:
+- Meta Ads strategy, targeting, creative, and optimization
+- Direct response copywriting: hooks, body copy, CTAs, headlines
+- Competitor analysis and market intelligence
+- Offer construction and positioning strategy
+- Landing page and funnel review
+- Client strategy and campaign planning
+
+Rules:
+- Be direct, specific, and actionable — never generic
+- When asked for copy, write actual copy — not descriptions of it
+- When asked for hooks, give real hooks they can deploy immediately
+- Think in terms of what actually converts, not theory
+- Label inferred analysis clearly when needed
+- You have access to a local Meta Ad Library scraper (Competitor Intel panel) that the user runs via the office interface`;
+
+// ── Views ──────────────────────────────────────────────────────────────
+function switchView(v) {
+  document.querySelectorAll('.view').forEach(el => el.classList.remove('active'));
+  document.querySelectorAll('.pill').forEach(el => el.classList.remove('active'));
+  document.getElementById(`view-${v}`).classList.add('active');
+  document.getElementById(`pill-${v}`).classList.add('active');
+  if (v === 'reports') loadReports();
+}
+
+// ── Ace character ──────────────────────────────────────────────────────
+function aceSpeak(msg, working = false) {
+  const bubble = document.getElementById('speech-bubble');
+  const ace = document.getElementById('ace');
+  bubble.className = 'speech' + (working ? ' working' : '');
+  bubble.innerHTML = working
+    ? `${msg} <span class="speech-dots"><span></span><span></span><span></span></span>`
+    : msg;
+  ace.className = 'ace' + (working ? ' working' : '');
+}
+
+function setStatus(text, state = 'ok') {
+  document.getElementById('status-text').textContent = text;
+  const dot = document.getElementById('status-dot');
+  dot.className = 'dot' + (state === 'thinking' ? ' thinking' : state === 'err' ? ' err' : '');
+}
+
+// ── Main input (office bar) ────────────────────────────────────────────
+function handleMainKey(e) {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleMainCommand(); }
+}
+
+async function handleMainCommand() {
+  const input = document.getElementById('main-input');
+  const text = input.value.trim();
+  if (!text) return;
+  input.value = ''; input.style.height = 'auto';
+
+  const lower = text.toLowerCase();
+
+  // Route to scraper if it looks like a research request
+  if (/research|scrape|competitor|ads? (for|in|about)|meta ad|ad library/i.test(lower)) {
+    // extract the query — strip command words
+    const q = text.replace(/^(research|scrape|competitor ads? for|run|analyze|check ads? for|look up)\s+/i, '').trim();
+    aceSpeak(`On it — researching "${q}"`, true);
+    openPanel('research');
+    document.getElementById('scraper-query').value = q;
+    setTimeout(() => runScraper(), 400);
+    return;
+  }
+
+  // Otherwise route to AI chat
+  switchView('chat');
+  await sendChatMessage(text);
+}
+
+// ── Chat ───────────────────────────────────────────────────────────────
+function handleChatKey(e) {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendChatMessage(); }
+}
+
+function useSuggestion(el) {
+  const text = el.querySelector('span').textContent.trim();
+  document.getElementById('chat-input').value = text;
+  sendChatMessage();
+}
+
+async function sendChatMessage(overrideText) {
+  const input = document.getElementById('chat-input');
+  const text = overrideText || input.value.trim();
+  if (!text) return;
+  if (!overrideText) { input.value = ''; input.style.height = 'auto'; }
+
+  const emptyEl = document.getElementById('chat-empty');
+  if (emptyEl) emptyEl.remove();
+
+  chatMessages.push({ role: 'user', content: text });
+  appendChatMsg('user', text);
+  const tid = appendTyping();
+
+  document.getElementById('chat-send').disabled = true;
+  setStatus('Thinking...', 'thinking');
+  aceSpeak('Thinking...', true);
+
+  try {
+    const resp = await fetch('/api/chat', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ messages: chatMessages, system: SYSTEM }),
+    });
+    const data = await resp.json();
+    removeTyping(tid);
+
+    if (data.error || !data.content) {
+      const msg = data.error?.message || 'API error. Check your ANTHROPIC_API_KEY in .env and restart the server.';
+      appendChatMsg('ace', `⚠️ ${msg}`);
+      setStatus('Error', 'err');
+      aceSpeak('Something went wrong. Check the API key.', false);
+    } else {
+      const reply = data.content[0].text;
+      chatMessages.push({ role: 'assistant', content: reply });
+      appendChatMsg('ace', reply);
+      setStatus('Ready', 'ok');
+      aceSpeak('Done! Anything else?', false);
+    }
+  } catch (err) {
+    removeTyping(tid);
+    appendChatMsg('ace', `⚠️ Can't reach server. Make sure \`node server.js\` is running.\n\nError: ${err.message}`);
+    setStatus('Offline', 'err');
+    aceSpeak('Server offline.', false);
+  }
+
+  document.getElementById('chat-send').disabled = false;
+}
+
+function appendChatMsg(role, content) {
+  const container = document.getElementById('chat-container');
+  const div = document.createElement('div');
+  div.className = `msg ${role === 'user' ? 'user' : 'ace-msg'}`;
+  div.innerHTML = `
+    <div class="msg-av">${role === 'user' ? '👤' : '✦'}</div>
+    <div class="msg-content">
+      <div class="msg-name">${role === 'user' ? 'You' : 'Ace'}</div>
+      <div class="msg-text">${marked.parse(content)}</div>
+    </div>`;
+  container.appendChild(div);
+  container.scrollTop = container.scrollHeight;
+}
+
+let typingN = 0;
+function appendTyping() {
+  const id = `t${++typingN}`;
+  const c = document.getElementById('chat-container');
+  const d = document.createElement('div');
+  d.id = id; d.className = 'msg ace-msg';
+  d.innerHTML = `<div class="msg-av">✦</div><div class="msg-content"><div class="msg-name">Ace</div><div class="typing-indicator"><span></span><span></span><span></span></div></div>`;
+  c.appendChild(d); c.scrollTop = c.scrollHeight;
+  return id;
+}
+function removeTyping(id) { const el = document.getElementById(id); if (el) el.remove(); }
+
+// ── Panels ─────────────────────────────────────────────────────────────
+function openPanel(name) {
+  closeAllPanels();
+  const overlay = document.getElementById(`panel-${name}`);
+  if (!overlay) return;
+  overlay.classList.add('open');
+  if (name === 'reports') loadReports();
+}
+function closePanel(name) {
+  const el = document.getElementById(`panel-${name}`);
+  if (el) el.classList.remove('open');
+}
+function closeAllPanels() {
+  document.querySelectorAll('.panel-overlay').forEach(el => el.classList.remove('open'));
+}
+function closePanelOnOverlay(e, name) {
+  if (e.target === e.currentTarget) closePanel(name);
+}
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeAllPanels(); });
+
+// ── Scraper ────────────────────────────────────────────────────────────
+async function runScraper() {
+  const q = document.getElementById('scraper-query').value.trim();
+  if (!q) return;
+
+  const term = document.getElementById('scraper-terminal');
+  const btn  = document.getElementById('scraper-btn');
+  const result = document.getElementById('scraper-result');
+
+  term.style.display = 'block';
+  term.innerHTML = '';
+  result.innerHTML = '';
+  btn.disabled = true;
+  btn.textContent = '⏳ Running...';
+
+  aceSpeak(`Scraping Meta Ad Library for "${q}"`, true);
+  setStatus('Scraping...', 'thinking');
+
+  const log = (html) => {
+    term.innerHTML += html + '\n';
+    term.scrollTop = term.scrollHeight;
+  };
+
+  log(`<span class="t-start">▶ Starting: ${q}</span>`);
+
+  try {
+    const es = new EventSource(`/api/scrape?q=${encodeURIComponent(q)}`);
+
+    es.onmessage = (e) => {
+      const d = JSON.parse(e.data);
+      if (d.type === 'log') {
+        const clean = d.line.replace(/\[.*?\]\s*[→✓✗⚠]\s*/g, '').trim();
+        if (clean) log(`<span class="t-log">${escHtml(clean)}</span>`);
+      } else if (d.type === 'err') {
+        log(`<span class="t-err">${escHtml(d.line)}</span>`);
+      } else if (d.type === 'done') {
+        es.close();
+        if (d.code === 0) {
+          log(`<span class="t-done">✓ Done!</span>`);
+          aceSpeak(`Finished! Report saved. Open Reports to view it.`, false);
+          setStatus('Ready', 'ok');
+          result.innerHTML = `<button class="btn btn-ghost" onclick="closePanel('research');openPanel('reports')">📊 View Report →</button>`;
+        } else {
+          log(`<span class="t-err">✗ Exited with code ${d.code}</span>`);
+          aceSpeak('Something went wrong with the scraper.', false);
+          setStatus('Error', 'err');
+        }
+        btn.disabled = false;
+        btn.textContent = '▶ Run';
+      }
+    };
+
+    es.onerror = () => {
+      es.close();
+      log(`<span class="t-err">✗ Connection lost. Is the server running?</span>`);
+      btn.disabled = false;
+      btn.textContent = '▶ Run';
+      setStatus('Error', 'err');
+    };
+  } catch (err) {
+    log(`<span class="t-err">✗ ${err.message}</span>`);
+    btn.disabled = false;
+    btn.textContent = '▶ Run';
+  }
+}
+
+// ── Reports ────────────────────────────────────────────────────────────
+async function loadReports() {
+  const el = document.getElementById('reports-content');
+  el.innerHTML = '<p style="color:var(--muted);font-size:13px">Loading...</p>';
+  try {
+    const resp = await fetch('/api/reports');
+    const files = await resp.json();
+    if (!files.length) {
+      el.innerHTML = '<p style="color:var(--muted2);font-size:13px;text-align:center;padding:40px 0">No reports yet. Run the scraper first.</p>';
+      return;
+    }
+    el.innerHTML = `<div class="reports-list">${files.map(f => `
+      <div class="report-item" onclick="viewReport('${escHtml(f.name)}')">
+        <div style="font-size:20px">📊</div>
+        <div class="ri-info">
+          <div class="ri-name">${escHtml(f.name.replace(/_/g,' ').replace(/\.md$/,''))}</div>
+          <div class="ri-date">${new Date(f.modified).toLocaleString()}</div>
+        </div>
+      </div>`).join('')}</div><div id="report-view-area"></div>`;
+  } catch {
+    el.innerHTML = '<p style="color:var(--red);font-size:13px">Could not load reports. Is the server running?</p>';
+  }
+}
+
+async function viewReport(file) {
+  const viewArea = document.getElementById('report-view-area');
+  if (!viewArea) return;
+  viewArea.innerHTML = '<div class="spinner" style="margin:20px auto"></div>';
+  try {
+    const resp = await fetch(`/api/report?file=${encodeURIComponent(file)}`);
+    const { content } = await resp.json();
+    viewArea.innerHTML = `<div class="report-view">${marked.parse(content)}</div>`;
+    viewArea.scrollIntoView({ behavior: 'smooth' });
+  } catch (e) {
+    viewArea.innerHTML = `<p style="color:var(--red)">Failed to load: ${e.message}</p>`;
+  }
+}
+
+// ── Concepts ───────────────────────────────────────────────────────────
+async function generateConcepts() {
+  const niche    = document.getElementById('cn-niche').value.trim();
+  const audience = document.getElementById('cn-audience').value.trim();
+  const offer    = document.getElementById('cn-offer').value.trim();
+  const tone     = document.getElementById('cn-tone').value;
+  const context  = document.getElementById('cn-context').value.trim();
+  if (!niche || !offer) { toast('Fill in Niche and Offer'); return; }
+
+  const out = document.getElementById('concepts-output');
+  const btn = document.getElementById('concepts-btn');
+  out.innerHTML = '<div class="spinner" style="margin:20px auto"></div>';
+  btn.disabled = true;
+  aceSpeak('Generating ad concepts...', true);
+  setStatus('Generating...', 'thinking');
+
+  const prompt = `Generate 5 high-converting Meta ad concepts for:
+Niche: ${niche}
+Target Audience: ${audience || 'general'}
+Offer: ${offer}
+Tone: ${tone}
+${context ? `Context: ${context}` : ''}
+
+Return ONLY a valid JSON array, no markdown:
+[{"title":"","hook":"","angle":"","body":"","cta":"","why":"","score":8}]
+
+Rules: hook = actual opening line (not a description). body = 2-3 sentences of actual copy.`;
+
+  try {
+    const resp = await fetch('/api/chat', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ messages: [{ role: 'user', content: prompt }], system: SYSTEM }),
+    });
+    const data = await resp.json();
+    if (data.error || !data.content) throw new Error(data.error?.message || 'API error');
+    let text = data.content[0].text.trim().replace(/^```(?:json)?\n?/m,'').replace(/\n?```$/m,'').trim();
+    const concepts = JSON.parse(text);
+    out.innerHTML = concepts.map((c, i) => `
+      <div class="concept-card">
+        <div class="cn">Concept ${i+1}</div>
+        <div class="ct">${escHtml(c.title)}</div>
+        <div class="cr"><span class="cl">Hook</span><span class="cv">"${escHtml(c.hook)}"</span></div>
+        <div class="cr"><span class="cl">Angle</span><span class="cv">${escHtml(c.angle)}</span></div>
+        <div class="cr"><span class="cl">Copy</span><span class="cv">${escHtml(c.body)}</span></div>
+        <div class="cr"><span class="cl">CTA</span><span class="cv">${escHtml(c.cta)}</span></div>
+        <div class="cr"><span class="cl">Why</span><span class="cv" style="color:var(--accent3)">${escHtml(c.why)}</span></div>
+        <div class="cr"><span class="cl">Score</span><span class="cv">
+          <span style="display:flex;align-items:center;gap:8px">${c.score}/10
+            <span class="score-bar"><span class="score-fill" style="width:${c.score*10}%"></span></span>
+          </span>
+        </span></div>
+      </div>`).join('');
+    aceSpeak('5 concepts ready!', false);
+    setStatus('Ready', 'ok');
+  } catch (err) {
+    out.innerHTML = `<p style="color:var(--red)">Error: ${err.message}</p>`;
+    aceSpeak('Something went wrong.', false);
+    setStatus('Error', 'err');
+  }
+  btn.disabled = false;
+}
+
+// ── Image Generation (Pollinations.ai — free, no API key) ──────────────
+async function generateImages() {
+  const brief  = document.getElementById('img-brief').value.trim();
+  const format = document.getElementById('img-format').value;
+  const style  = document.getElementById('img-style').value;
+  if (!brief) { toast('Describe what you want'); return; }
+
+  const [w, h] = format.split('x').map(Number);
+  const out = document.getElementById('img-output');
+  const btn = document.getElementById('img-btn');
+  btn.disabled = true;
+  aceSpeak('Generating images...', true);
+  setStatus('Generating...', 'thinking');
+
+  // First, let Claude enhance the prompt
+  let enhancedPrompt = brief;
+  try {
+    const resp = await fetch('/api/chat', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        messages: [{ role: 'user', content: `Convert this ad creative brief into a detailed, professional image generation prompt optimized for advertising. Return only the prompt text, nothing else.\n\nBrief: ${brief}\nStyle: ${style}` }],
+        system: SYSTEM,
+      }),
+    });
+    const d = await resp.json();
+    if (d.content?.[0]?.text) enhancedPrompt = d.content[0].text.trim();
+  } catch {}
+
+  // Generate 4 variations
+  const seeds = [42, 137, 888, 2024];
+  out.innerHTML = seeds.map(seed => `
+    <div class="img-card" id="imgcard-${seed}">
+      <div class="img-loading"><div class="spinner"></div><span>Generating...</span></div>
+      <div class="img-card-info"><div class="img-card-label" style="font-size:10px;color:var(--muted2)">Variation ${seeds.indexOf(seed)+1}</div></div>
+    </div>`).join('');
+
+  seeds.forEach(seed => {
+    const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(enhancedPrompt + ', professional advertising, high quality')}?width=${w}&height=${h}&seed=${seed}&nologo=true&enhance=true`;
+    const card = document.getElementById(`imgcard-${seed}`);
+    const img = new Image();
+    img.onload = () => {
+      card.innerHTML = `
+        <img src="${url}" alt="Ad creative variant ${seed}" loading="lazy"/>
+        <div class="img-card-info"><div class="img-card-label">Variation ${seeds.indexOf(seed)+1} · ${w}×${h}</div></div>
+        <a class="img-dl" href="${url}" download="ad-creative-${seed}.jpg" target="_blank">⬇ Download</a>`;
+    };
+    img.onerror = () => {
+      card.innerHTML = `<div class="img-loading" style="background:var(--card)"><span style="color:var(--red)">Failed to generate</span></div>`;
+    };
+    img.src = url;
+  });
+
+  aceSpeak('Images generating — they\'ll load in a few seconds.', false);
+  setStatus('Ready', 'ok');
+  btn.disabled = false;
+}
+
+// ── Utilities ──────────────────────────────────────────────────────────
+function autoResize(el) {
+  el.style.height = 'auto';
+  el.style.height = Math.min(el.scrollHeight, 120) + 'px';
+}
+
+function escHtml(str) {
+  return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+let toastTimer;
+function toast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 2500);
+}
+</script>
+</body>
+</html>
