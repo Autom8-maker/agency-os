@@ -1,293 +1,196 @@
-import { Annotation, StateGraph, END } from '@langchain/langgraph';
-import { ChatAnthropic } from '@langchain/anthropic';
-import type {
-  Analysis,
-  StrategyAngle,
-  PositioningItem,
-  CampaignConcept,
-} from '@/types';
+/**
+ * Strategy Brain
+ *
+ * Responsibility: Structured strategic reasoning. ONE node. ONE call.
+ * This is the decision-making layer of the system.
+ *
+ * Input:  StrategyBrainInput  — strict contract from Analysis Layer
+ * Output: StrategyBrainOutput — strict contract consumed by Creative Layer
+ *
+ * It does NOT extract data. It does NOT generate creative.
+ * It reasons about competitive position and produces actionable decisions.
+ */
 
-// ─── State Definition ─────────────────────────────────────────────────────────
+import { Annotation, StateGraph, END } from '@langchain/langgraph';
+import { getLLM, toText, parseJSON } from '@/lib/llm';
+import type { StrategyBrainInput, StrategyBrainOutput } from '@/types';
+
+// ─── State ────────────────────────────────────────────────────────────────────
+
+const EMPTY_OUTPUT: StrategyBrainOutput = {
+  angle_clusters:      [],
+  recommended_angles:  [],
+  campaign_directions: [],
+  testing_plan:        [],
+  strategic_insights:  [],
+};
 
 const StrategyStateAnnotation = Annotation.Root({
-  analysis: Annotation<Analysis>({ reducer: (_, b) => b }),
-  niche: Annotation<string>({ reducer: (_, b) => b }),
-  audience: Annotation<string>({ reducer: (_, b) => b }),
-  offer: Annotation<string>({ reducer: (_, b) => b }),
-  goal: Annotation<string>({ reducer: (_, b) => b }),
-  focus: Annotation<string>({ reducer: (_, b) => b }),
-  offer_angles: Annotation<StrategyAngle[]>({ reducer: (_, b) => b, default: () => [] }),
-  positioning: Annotation<PositioningItem[]>({ reducer: (_, b) => b, default: () => [] }),
-  campaign_concepts: Annotation<CampaignConcept[]>({ reducer: (_, b) => b, default: () => [] }),
-  messaging_priorities: Annotation<string[]>({ reducer: (_, b) => b, default: () => [] }),
-  avoid: Annotation<string[]>({ reducer: (_, b) => b, default: () => [] }),
+  input:  Annotation<StrategyBrainInput>({ reducer: (_, b) => b }),
+  output: Annotation<StrategyBrainOutput>({ reducer: (_, b) => b, default: () => EMPTY_OUTPUT }),
 });
 
 type StrategyState = typeof StrategyStateAnnotation.State;
 
-// ─── LLM ─────────────────────────────────────────────────────────────────────
+// ─── Node: Strategy Brain (single, authoritative reasoning node) ───────────────
 
-function getLLM() {
-  return new ChatAnthropic({
-    model: 'claude-3-5-sonnet-20241022',
-    temperature: 0.5,
-    apiKey: process.env.ANTHROPIC_API_KEY,
-  });
-}
+async function strategyBrain(state: StrategyState): Promise<Partial<StrategyState>> {
+  const llm = getLLM(0.4);
+  const { input } = state;
 
-function safeParseJson<T>(text: string, fallback: T): T {
-  try {
-    const match = text.match(/```json\n?([\s\S]*?)\n?```/) || text.match(/(\[[\s\S]*\]|\{[\s\S]*\})/);
-    const raw = match ? match[1] : text;
-    return JSON.parse(raw) as T;
-  } catch {
-    return fallback;
-  }
-}
+  const hooksStr    = input.top_hooks.slice(0, 8).map((h, i) => `${i + 1}. ${h}`).join('\n') || 'None available';
+  const offersStr   = input.top_offers.slice(0, 8).map((o, i) => `${i + 1}. ${o}`).join('\n') || 'None available';
+  const patternsStr = input.patterns.slice(0, 6).map((p, i) => `${i + 1}. ${p}`).join('\n') || 'None available';
 
-function analysisContext(state: StrategyState): string {
-  const { analysis } = state;
-  const hooksStr = analysis.hooks?.map((h) => `- ${h.text}`).join('\n') || 'None';
-  const offersStr = analysis.offers?.map((o) => `- ${o.text}`).join('\n') || 'None';
-  const anglesStr = analysis.angles?.map((a) => `- ${a.text}`).join('\n') || 'None';
-  const gapsStr = analysis.gaps?.map((g) => `- ${g.text} (${g.notes || ''})`).join('\n') || 'None';
-  const saturatedStr = analysis.saturated?.map((s) => `- ${s.text}`).join('\n') || 'None';
+  const response = await llm.invoke([
+    {
+      role: 'system',
+      content: `You are a world-class direct response advertising strategist.
+You think in terms of what actually converts. You are commercially sharp, opinionated, and never vague.
+You produce structured strategic decisions — not descriptions, not general advice.
+Every output must be actionable and grounded in the competitive data provided.`,
+    },
+    {
+      role: 'user',
+      content: `Produce a complete strategic playbook for the following brand.
 
-  return `NICHE: ${state.niche}
-TARGET AUDIENCE: ${state.audience}
-OFFER: ${state.offer}
-GOAL: ${state.goal}
-STRATEGIC FOCUS: ${state.focus}
+━━━ BRAND CONTEXT ━━━
+Niche: ${input.niche}
+Target Audience: ${input.audience}
+Current Offer: ${input.offer}
+Campaign Goal: ${input.goal}
 
-COMPETITIVE INTELLIGENCE:
-Common Hooks in Market:
+━━━ COMPETITIVE INTELLIGENCE ━━━
+Top Competitor Hooks:
 ${hooksStr}
 
-Common Offers in Market:
+Top Competitor Offers:
 ${offersStr}
 
-Common Angles in Market:
-${anglesStr}
+Market Patterns:
+${patternsStr}
 
-Market Gaps (Opportunity):
-${gapsStr}
+Competitor Summary: ${input.competitor_summary || 'Not provided'}
 
-Saturated / Overdone:
-${saturatedStr}`;
-}
+━━━ YOUR JOB ━━━
+Analyze the competitive landscape and produce a structured strategic playbook.
 
-// ─── Node: Generate Angles ────────────────────────────────────────────────────
-
-async function generateAngles(state: StrategyState): Promise<Partial<StrategyState>> {
-  const llm = getLLM();
-  const context = analysisContext(state);
-
-  const response = await llm.invoke([
-    {
-      role: 'user',
-      content: `You are a world-class direct response advertising strategist.
-
-Based on the competitive intelligence below, generate 5-7 differentiated offer angles for this brand. Each angle should exploit a market gap or underserved positioning opportunity.
-
-${context}
-
-Return a JSON array of offer angle objects:
-- angle: the core angle or positioning statement (string)
-- rationale: why this angle works given the competitive landscape (string)
-- example: a sample hook or headline using this angle (string)
-
-Return ONLY the JSON array:
-[{"angle": "...", "rationale": "...", "example": "..."}]`,
-    },
-  ]);
-
-  const offer_angles = safeParseJson<StrategyAngle[]>(
-    typeof response.content === 'string' ? response.content : JSON.stringify(response.content),
-    []
-  );
-
-  return { offer_angles };
-}
-
-// ─── Node: Generate Positioning ───────────────────────────────────────────────
-
-async function generatePositioning(state: StrategyState): Promise<Partial<StrategyState>> {
-  const llm = getLLM();
-  const context = analysisContext(state);
-  const anglesStr = state.offer_angles.map((a) => `- ${a.angle}: ${a.rationale}`).join('\n');
-
-  const response = await llm.invoke([
-    {
-      role: 'user',
-      content: `You are a brand strategist specializing in positioning.
-
-Based on the market intelligence and proposed angles, develop precise positioning statements that differentiate this brand.
-
-${context}
-
-PROPOSED ANGLES:
-${anglesStr}
-
-Create 4-5 positioning statements. Each should have:
-- statement: the positioning statement (string)
-- differentiator: the specific thing that sets this apart from competitors (string)
-
-Return ONLY a JSON array:
-[{"statement": "...", "differentiator": "..."}]`,
-    },
-  ]);
-
-  const positioning = safeParseJson<PositioningItem[]>(
-    typeof response.content === 'string' ? response.content : JSON.stringify(response.content),
-    []
-  );
-
-  return { positioning };
-}
-
-// ─── Node: Generate Concepts ──────────────────────────────────────────────────
-
-async function generateConcepts(state: StrategyState): Promise<Partial<StrategyState>> {
-  const llm = getLLM();
-  const context = analysisContext(state);
-  const positioningStr = state.positioning
-    .map((p) => `- ${p.statement} (Differentiator: ${p.differentiator})`)
-    .join('\n');
-
-  const response = await llm.invoke([
-    {
-      role: 'user',
-      content: `You are a creative strategist developing campaign concepts for a paid advertising campaign.
-
-${context}
-
-POSITIONING:
-${positioningStr}
-
-Develop 3-4 distinct campaign concepts that could each run as a separate campaign or ad set. Each concept should target different audience segments or use different emotional angles.
-
-For each concept:
-- name: memorable campaign name (string)
-- hook: the lead hook or opening line (string)
-- format: recommended ad format (Video | Static | Carousel | UGC | etc.) (string)
-- audience_segment: the specific audience this targets (string)
-- key_message: the core message in one sentence (string)
-
-Return ONLY a JSON array:
-[{"name": "...", "hook": "...", "format": "...", "audience_segment": "...", "key_message": "..."}]`,
-    },
-  ]);
-
-  const campaign_concepts = safeParseJson<CampaignConcept[]>(
-    typeof response.content === 'string' ? response.content : JSON.stringify(response.content),
-    []
-  );
-
-  return { campaign_concepts };
-}
-
-// ─── Node: Synthesize ─────────────────────────────────────────────────────────
-
-async function synthesize(state: StrategyState): Promise<Partial<StrategyState>> {
-  const llm = getLLM();
-
-  const conceptsStr = state.campaign_concepts
-    .map((c) => `- ${c.name}: ${c.key_message}`)
-    .join('\n');
-
-  const response = await llm.invoke([
-    {
-      role: 'user',
-      content: `You are a performance marketing strategist wrapping up a strategy brief.
-
-Based on the strategy developed for:
-- Niche: ${state.niche}
-- Audience: ${state.audience}
-- Offer: ${state.offer}
-- Goal: ${state.goal}
-
-Campaign Concepts:
-${conceptsStr}
-
-Provide two lists:
-
-1. messaging_priorities: 5-7 key messaging priorities ranked by importance (what to emphasize most)
-2. avoid: 4-6 specific things to AVOID in messaging based on market saturation and strategic positioning
-
-Return as a JSON object:
+Return ONLY this JSON object:
 {
-  "messaging_priorities": ["...", "..."],
-  "avoid": ["...", "..."]
+  "angle_clusters": [
+    {
+      "angle": "angle name (3-6 words)",
+      "description": "what this angle means and how to position around it",
+      "why_it_works": "specific psychological or market reason this converts in this niche",
+      "market_saturation": "low | medium | high"
+    }
+  ],
+  "recommended_angles": [
+    "Top angle to test first — one sentence with rationale",
+    "Second angle to test — one sentence with rationale"
+  ],
+  "campaign_directions": [
+    {
+      "name": "Campaign name",
+      "angle": "which angle cluster this maps to",
+      "hook": "exact opening hook line ready to use as-is",
+      "format": "Video | Static | Carousel | UGC",
+      "audience_segment": "specific audience segment description",
+      "priority": "high | medium | low"
+    }
+  ],
+  "testing_plan": [
+    {
+      "hypothesis": "If we run [X] against [Y], we expect [Z] because...",
+      "test_type": "A/B hook test | Angle test | Offer test | Format test",
+      "expected_outcome": "specific measurable outcome"
+    }
+  ],
+  "strategic_insights": [
+    "Specific, non-obvious insight about this market",
+    "What competitors are NOT doing that represents an opening",
+    "What the data suggests about audience psychology in this niche"
+  ]
 }
 
-Return ONLY the JSON object.`,
+Requirements:
+- angle_clusters: 5-7 distinct, non-overlapping angles specific to this niche (not generic)
+- recommended_angles: top 2-3 prioritized by lowest saturation + highest fit for this offer
+- campaign_directions: 3-5 ready-to-brief concepts with usable hooks
+- testing_plan: 3-4 specific hypotheses grounded in the competitive data
+- strategic_insights: 3-5 opinionated, non-obvious observations
+
+Return ONLY the JSON object. No markdown, no preamble.`,
     },
   ]);
 
-  const contentStr =
-    typeof response.content === 'string' ? response.content : JSON.stringify(response.content);
-
-  const result = safeParseJson<{ messaging_priorities: string[]; avoid: string[] }>(contentStr, {
-    messaging_priorities: [],
-    avoid: [],
-  });
+  const raw    = toText(response.content);
+  const parsed = parseJSON<StrategyBrainOutput>(raw, EMPTY_OUTPUT);
 
   return {
-    messaging_priorities: result.messaging_priorities || [],
-    avoid: result.avoid || [],
+    output: {
+      angle_clusters:      parsed.angle_clusters      || [],
+      recommended_angles:  parsed.recommended_angles  || [],
+      campaign_directions: parsed.campaign_directions || [],
+      testing_plan:        parsed.testing_plan        || [],
+      strategic_insights:  parsed.strategic_insights  || [],
+    },
   };
 }
 
-// ─── Graph Construction ───────────────────────────────────────────────────────
+// ─── Graph ────────────────────────────────────────────────────────────────────
 
 const strategyGraph = new StateGraph(StrategyStateAnnotation)
-  .addNode('generateAngles', generateAngles)
-  .addNode('generatePositioning', generatePositioning)
-  .addNode('generateConcepts', generateConcepts)
-  .addNode('synthesize', synthesize)
-  .addEdge('__start__', 'generateAngles')
-  .addEdge('generateAngles', 'generatePositioning')
-  .addEdge('generatePositioning', 'generateConcepts')
-  .addEdge('generateConcepts', 'synthesize')
-  .addEdge('synthesize', END);
+  .addNode('strategyBrain', strategyBrain)
+  .addEdge('__start__', 'strategyBrain')
+  .addEdge('strategyBrain', END);
 
 export const strategyWorkflow = strategyGraph.compile();
 
-// ─── Runner Function ──────────────────────────────────────────────────────────
+// ─── Runner ───────────────────────────────────────────────────────────────────
 
-export async function runStrategy(
-  analysis: Analysis,
-  niche: string,
-  audience: string,
-  offer: string,
-  goal: string,
-  focus: string
-): Promise<{
-  offer_angles: StrategyAngle[];
-  positioning: PositioningItem[];
-  campaign_concepts: CampaignConcept[];
-  messaging_priorities: string[];
-  avoid: string[];
-}> {
-  const result = await strategyWorkflow.invoke({
-    analysis,
-    niche,
-    audience,
-    offer,
-    goal,
-    focus,
-    offer_angles: [],
-    positioning: [],
-    campaign_concepts: [],
-    messaging_priorities: [],
-    avoid: [],
-  });
+export async function runStrategy(input: StrategyBrainInput): Promise<StrategyBrainOutput> {
+  const result = await strategyWorkflow.invoke({ input, output: EMPTY_OUTPUT });
+  return result.output;
+}
+
+// ─── Input Builder ────────────────────────────────────────────────────────────
+// Constructs StrategyBrainInput from Analysis data + user params
+
+export function buildStrategyInput(params: {
+  niche: string;
+  audience: string;
+  offer: string;
+  goal: string;
+  hooks:       Array<{ text: string }>;
+  offers:      Array<{ text: string }>;
+  patterns:    Array<{ text: string; notes?: string }>;
+  gaps:        Array<{ text: string; notes?: string }>;
+  saturated:   Array<{ text: string }>;
+  advertisers: Array<{ name: string; dominant_strategy?: string }>;
+}): StrategyBrainInput {
+  const competitorSummary = [
+    params.advertisers.length > 0
+      ? `Key advertisers: ${params.advertisers.slice(0, 3).map((a) => `${a.name} (${a.dominant_strategy || 'unknown strategy'})`).join(', ')}`
+      : '',
+    params.saturated.length > 0
+      ? `Saturated angles to avoid: ${params.saturated.slice(0, 4).map((s) => s.text).join('; ')}`
+      : '',
+    params.gaps.length > 0
+      ? `Market gaps: ${params.gaps.slice(0, 3).map((g) => `${g.text}${g.notes ? ` — ${g.notes}` : ''}`).join('; ')}`
+      : '',
+  ]
+    .filter(Boolean)
+    .join('. ');
 
   return {
-    offer_angles: result.offer_angles,
-    positioning: result.positioning,
-    campaign_concepts: result.campaign_concepts,
-    messaging_priorities: result.messaging_priorities,
-    avoid: result.avoid,
+    niche:              params.niche,
+    audience:           params.audience,
+    offer:              params.offer,
+    goal:               params.goal,
+    top_hooks:          params.hooks.slice(0, 8).map((h) => h.text),
+    top_offers:         params.offers.slice(0, 8).map((o) => o.text),
+    patterns:           params.patterns.slice(0, 6).map((p) => `${p.text}${p.notes ? ` — ${p.notes}` : ''}`),
+    competitor_summary: competitorSummary,
   };
 }

@@ -45,13 +45,14 @@ CREATE TABLE IF NOT EXISTS analyses (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   session_id UUID REFERENCES research_sessions(id) ON DELETE CASCADE,
   niche TEXT,
-  hooks JSONB DEFAULT '[]',        -- AnalysisItem[]
-  offers JSONB DEFAULT '[]',       -- AnalysisItem[]
-  angles JSONB DEFAULT '[]',       -- AnalysisItem[]
-  patterns JSONB DEFAULT '[]',     -- AnalysisItem[]
-  saturated JSONB DEFAULT '[]',    -- AnalysisItem[]
-  gaps JSONB DEFAULT '[]',         -- AnalysisItem[]
-  advertisers JSONB DEFAULT '[]',  -- AdvertiserInfo[]
+  extracted_data JSONB DEFAULT NULL, -- ExtractionOutput: top_hooks, top_offers, top_ctas, angles_detected
+  hooks JSONB DEFAULT '[]',          -- AnalysisItem[] with frequency/strength annotations
+  offers JSONB DEFAULT '[]',         -- AnalysisItem[]
+  angles JSONB DEFAULT '[]',         -- AnalysisItem[]
+  patterns JSONB DEFAULT '[]',       -- AnalysisItem[]
+  saturated JSONB DEFAULT '[]',      -- AnalysisItem[]
+  gaps JSONB DEFAULT '[]',           -- AnalysisItem[]
+  advertisers JSONB DEFAULT '[]',    -- AdvertiserInfo[]
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -62,6 +63,7 @@ CREATE INDEX IF NOT EXISTS idx_analyses_niche ON analyses(niche);
 -- ─── strategies ───────────────────────────────────────────────────────────────
 -- One strategy per analysis, contains positioning and campaign concepts
 
+-- Strategy Brain output schema (replaces scattered offer_angles/positioning/concepts)
 CREATE TABLE IF NOT EXISTS strategies (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   analysis_id UUID REFERENCES analyses(id) ON DELETE CASCADE,
@@ -69,11 +71,12 @@ CREATE TABLE IF NOT EXISTS strategies (
   audience TEXT,
   offer TEXT,
   goal TEXT,
-  offer_angles JSONB DEFAULT '[]',         -- StrategyAngle[]
-  positioning JSONB DEFAULT '[]',           -- PositioningItem[]
-  campaign_concepts JSONB DEFAULT '[]',     -- CampaignConcept[]
-  messaging_priorities JSONB DEFAULT '[]',  -- string[]
-  avoid JSONB DEFAULT '[]',                 -- string[]
+  -- StrategyBrainOutput fields
+  angle_clusters      JSONB DEFAULT '[]',  -- AngleCluster[]: angle, description, why_it_works, market_saturation
+  recommended_angles  JSONB DEFAULT '[]',  -- string[]: top angles to test, with rationale
+  campaign_directions JSONB DEFAULT '[]',  -- CampaignDirection[]: name, angle, hook, format, audience_segment, priority
+  testing_plan        JSONB DEFAULT '[]',  -- TestingHypothesis[]: hypothesis, test_type, expected_outcome
+  strategic_insights  JSONB DEFAULT '[]',  -- string[]: opinionated market observations
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 

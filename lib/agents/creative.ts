@@ -1,65 +1,70 @@
-import { Annotation, StateGraph, END } from '@langchain/langgraph';
-import { ChatAnthropic } from '@langchain/anthropic';
-import type { CreativeType, Strategy } from '@/types';
+/**
+ * Creative Layer
+ *
+ * Responsibility: Generate ad copy, briefs, and image prompts.
+ * Depends entirely on StrategyBrainOutput — no re-analysis, no re-strategizing.
+ *
+ * Three nodes (conditional routing by type):
+ *   writeCopy | writeBrief | writeImagePrompts
+ */
 
-// ─── State Definition ─────────────────────────────────────────────────────────
+import { Annotation, StateGraph, END } from '@langchain/langgraph';
+import { getLLM, toText } from '@/lib/llm';
+import type { CreativeType, StrategyBrainOutput } from '@/types';
+
+// ─── State ────────────────────────────────────────────────────────────────────
 
 const CreativeStateAnnotation = Annotation.Root({
-  niche: Annotation<string>({ reducer: (_, b) => b }),
-  audience: Annotation<string>({ reducer: (_, b) => b }),
-  offer: Annotation<string>({ reducer: (_, b) => b }),
-  tone: Annotation<string>({ reducer: (_, b) => b }),
-  type: Annotation<CreativeType>({ reducer: (_, b) => b }),
-  strategy: Annotation<Strategy | undefined>({ reducer: (_, b) => b }),
-  output: Annotation<string>({ reducer: (_, b) => b, default: () => '' }),
+  niche:           Annotation<string>({ reducer: (_, b) => b }),
+  audience:        Annotation<string>({ reducer: (_, b) => b }),
+  offer:           Annotation<string>({ reducer: (_, b) => b }),
+  tone:            Annotation<string>({ reducer: (_, b) => b }),
+  type:            Annotation<CreativeType>({ reducer: (_, b) => b }),
+  strategy_output: Annotation<StrategyBrainOutput | undefined>({ reducer: (_, b) => b }),
+  output:          Annotation<string>({ reducer: (_, b) => b, default: () => '' }),
 });
 
 type CreativeState = typeof CreativeStateAnnotation.State;
 
-// ─── LLM ─────────────────────────────────────────────────────────────────────
+// ─── Strategy Context Builder ─────────────────────────────────────────────────
+// Distills StrategyBrainOutput into a crisp context block for creative prompts
 
-function getLLM() {
-  return new ChatAnthropic({
-    model: 'claude-3-5-sonnet-20241022',
-    temperature: 0.7,
-    apiKey: process.env.ANTHROPIC_API_KEY,
-  });
-}
+function buildStrategyContext(s: StrategyBrainOutput | undefined): string {
+  if (!s) return '';
 
-function strategyContext(state: CreativeState): string {
-  if (!state.strategy) return '';
+  const lines: string[] = ['\n━━━ STRATEGY CONTEXT ━━━'];
 
-  const anglesStr =
-    state.strategy.offer_angles?.map((a) => `- ${a.angle}`).join('\n') || 'None';
-  const positioningStr =
-    state.strategy.positioning?.map((p) => `- ${p.statement}`).join('\n') || 'None';
-  const prioritiesStr = state.strategy.messaging_priorities?.join(', ') || 'None';
-  const avoidStr = state.strategy.avoid?.join(', ') || 'None';
+  if (s.recommended_angles.length > 0) {
+    lines.push('Recommended angles to lead with:');
+    s.recommended_angles.slice(0, 3).forEach((a, i) => lines.push(`  ${i + 1}. ${a}`));
+  }
 
-  return `
-STRATEGY CONTEXT:
-Offer Angles:
-${anglesStr}
+  if (s.campaign_directions.length > 0) {
+    const top = s.campaign_directions.filter((d) => d.priority === 'high').slice(0, 2);
+    if (top.length > 0) {
+      lines.push('\nHigh-priority campaign directions:');
+      top.forEach((d) => lines.push(`  • ${d.name}: hook → "${d.hook}" (${d.format})`));
+    }
+  }
 
-Positioning:
-${positioningStr}
+  if (s.strategic_insights.length > 0) {
+    lines.push('\nKey strategic insights:');
+    s.strategic_insights.slice(0, 2).forEach((i) => lines.push(`  • ${i}`));
+  }
 
-Messaging Priorities: ${prioritiesStr}
-Avoid: ${avoidStr}`;
+  return lines.join('\n');
 }
 
 // ─── Node: Write Ad Copy ──────────────────────────────────────────────────────
 
 async function writeCopy(state: CreativeState): Promise<Partial<CreativeState>> {
-  const llm = getLLM();
-  const context = strategyContext(state);
+  const llm     = getLLM(0.7);
+  const context = buildStrategyContext(state.strategy_output);
 
   const response = await llm.invoke([
     {
       role: 'user',
-      content: `You are a world-class direct response copywriter who writes high-converting Facebook and Instagram ads.
-
-Write 3 complete ad variations for the following:
+      content: `You are a world-class direct response copywriter. Write high-converting Facebook and Instagram ads.
 
 NICHE: ${state.niche}
 AUDIENCE: ${state.audience}
@@ -67,50 +72,66 @@ OFFER: ${state.offer}
 TONE: ${state.tone}
 ${context}
 
-For each variation write:
-1. HOOK (first 1-2 lines that stop the scroll)
-2. BODY (3-5 sentences expanding on the offer/pain/benefit)
-3. CTA (clear call-to-action line)
+Write 3 complete ad variations. Each must be deployable as-is.
 
-Format as:
+Format:
 ---
-VARIATION 1: [Theme/Angle Name]
+VARIATION 1: [Angle Name]
 
 HOOK:
-[hook text]
+[scroll-stopping opening — 1-2 lines max]
 
 BODY:
-[body text]
+[3-5 sentences expanding on pain/benefit/proof]
 
 CTA:
-[cta text]
+[single action line]
 
 ---
-VARIATION 2: [Theme/Angle Name]
-...and so on
+VARIATION 2: [Angle Name]
 
-Write for Facebook/Instagram feed placement. Make them feel native, not salesy. Use the specified tone throughout.`,
+HOOK:
+[different angle, different opening]
+
+BODY:
+[...]
+
+CTA:
+[...]
+
+---
+VARIATION 3: [Angle Name]
+
+HOOK:
+[...]
+
+BODY:
+[...]
+
+CTA:
+[...]
+
+Rules:
+- Each variation uses a different angle from the strategy context
+- Hooks must stop the scroll — no generic openers like "Are you tired of..."
+- Body must feel native, not salesy
+- CTA must be specific and action-oriented`,
     },
   ]);
 
-  return {
-    output:
-      typeof response.content === 'string' ? response.content : JSON.stringify(response.content),
-  };
+  return { output: toText(response.content) };
 }
 
 // ─── Node: Write Creative Brief ───────────────────────────────────────────────
 
 async function writeBrief(state: CreativeState): Promise<Partial<CreativeState>> {
-  const llm = getLLM();
-  const context = strategyContext(state);
+  const llm     = getLLM(0.5);
+  const context = buildStrategyContext(state.strategy_output);
 
   const response = await llm.invoke([
     {
       role: 'user',
-      content: `You are a creative director at a top-tier digital advertising agency.
-
-Write a comprehensive creative brief for a paid social advertising campaign.
+      content: `You are a creative director at a top performance advertising agency. Write a production-ready creative brief.
 
 NICHE: ${state.niche}
 AUDIENCE: ${state.audience}
@@ -118,151 +139,127 @@ OFFER: ${state.offer}
 TONE: ${state.tone}
 ${context}
 
-The brief should cover:
-
 # CAMPAIGN OVERVIEW
-[2-3 sentence summary of the campaign's purpose and approach]
+[2-3 sentences: campaign purpose and strategic approach]
 
 # TARGET AUDIENCE
-[Detailed audience description: demographics, psychographics, pain points, desires, where they are in the buyer journey]
-
-# CAMPAIGN OBJECTIVES
-[Primary and secondary objectives with measurable goals]
+[Demographics, psychographics, pain points, buyer journey stage]
 
 # CORE MESSAGE
-[The single most important thing we want the audience to feel/think/do]
+[The single most important thing the audience must feel/think/do]
 
 # TONE & VOICE
-[Specific tone guidelines with examples of words/phrases to use and avoid]
+[Specific guidelines with do/don't phrase examples]
 
 # CREATIVE DIRECTION
-[Visual style guidelines, imagery concepts, color/mood direction]
+[Visual style, imagery concepts, color/mood]
 
-# AD FORMATS RECOMMENDED
-[Specific formats with rationale: video length, aspect ratios, static specs]
+# AD FORMATS
+[Recommended formats with rationale and specs]
 
 # HOOKS TO TEST
-[5-7 opening hooks to A/B test across formats]
+[5-7 opening hooks for A/B testing]
 
-# KEY PROOF POINTS
-[Evidence, social proof, statistics to include]
+# PROOF POINTS
+[Evidence, social proof, data to include]
 
 # CALLS TO ACTION
-[Recommended CTAs with reasoning]
+[2-3 CTA options with reasoning]
 
 # SUCCESS METRICS
-[KPIs and what "winning" looks like for this campaign]
+[KPIs and what winning looks like]
 
-Write this as a professional document a creative team would use to execute the campaign.`,
+Be specific. Vague briefs produce bad creative.`,
     },
   ]);
 
-  return {
-    output:
-      typeof response.content === 'string' ? response.content : JSON.stringify(response.content),
-  };
+  return { output: toText(response.content) };
 }
 
 // ─── Node: Write Image Prompts ────────────────────────────────────────────────
 
 async function writeImagePrompts(state: CreativeState): Promise<Partial<CreativeState>> {
-  const llm = getLLM();
-  const context = strategyContext(state);
+  const llm     = getLLM(0.6);
+  const context = buildStrategyContext(state.strategy_output);
 
   const response = await llm.invoke([
     {
       role: 'user',
       content: `You are a creative director specializing in AI-generated advertising visuals.
 
-Create 8 detailed image generation prompts for a paid social campaign.
-
 NICHE: ${state.niche}
 AUDIENCE: ${state.audience}
 OFFER: ${state.offer}
 TONE: ${state.tone}
 ${context}
 
-For each prompt:
-1. Write a detailed prompt optimized for Midjourney or DALL-E 3
-2. Include: subject, setting, lighting, mood, style, composition, and technical specs
-3. Add a brief note on which ad concept or angle this visual supports
+Create 8 Midjourney/DALL-E prompts for paid social — 2 each of:
+- Lifestyle/aspirational
+- Problem/pain state
+- Solution/product highlight
+- Social proof/results
 
-Format as:
+Format each:
 ---
-PROMPT 1: [Concept Name]
+PROMPT [N]: [Category — Concept Name]
 
-[Full detailed prompt text]
+[Full prompt: subject, setting, lighting, mood, style, composition, technical specs]
 
-USE FOR: [Which angle/concept/audience segment this supports]
+USE FOR: [Which campaign direction this supports]
 ASPECT RATIO: [16:9 | 1:1 | 9:16]
+PLACEMENT: [Feed | Story | Both]
 ---
 
-Cover these visual categories:
-- 2 lifestyle/aspirational images
-- 2 problem/before state images
-- 2 product/solution highlight images
-- 2 social proof/testimonial style images
-
-Make prompts highly specific and actionable.`,
+Include in each prompt: lighting quality, color palette, emotional tone, subject detail, background, camera angle.`,
     },
   ]);
 
-  return {
-    output:
-      typeof response.content === 'string' ? response.content : JSON.stringify(response.content),
-  };
+  return { output: toText(response.content) };
 }
 
 // ─── Router ───────────────────────────────────────────────────────────────────
 
 function routeCreative(state: CreativeState): string {
-  switch (state.type) {
-    case 'copy':
-      return 'writeCopy';
-    case 'brief':
-      return 'writeBrief';
-    case 'image_prompts':
-      return 'writeImagePrompts';
-    default:
-      return 'writeCopy';
-  }
+  if (state.type === 'brief')         return 'writeBrief';
+  if (state.type === 'image_prompts') return 'writeImagePrompts';
+  return 'writeCopy';
 }
 
-// ─── Graph Construction ───────────────────────────────────────────────────────
+// ─── Graph ────────────────────────────────────────────────────────────────────
 
 const creativeGraph = new StateGraph(CreativeStateAnnotation)
-  .addNode('writeCopy', writeCopy)
-  .addNode('writeBrief', writeBrief)
+  .addNode('writeCopy',         writeCopy)
+  .addNode('writeBrief',        writeBrief)
   .addNode('writeImagePrompts', writeImagePrompts)
   .addConditionalEdges('__start__', routeCreative, {
-    writeCopy: 'writeCopy',
-    writeBrief: 'writeBrief',
+    writeCopy:         'writeCopy',
+    writeBrief:        'writeBrief',
     writeImagePrompts: 'writeImagePrompts',
   })
-  .addEdge('writeCopy', END)
-  .addEdge('writeBrief', END)
+  .addEdge('writeCopy',         END)
+  .addEdge('writeBrief',        END)
   .addEdge('writeImagePrompts', END);
 
 export const creativeWorkflow = creativeGraph.compile();
 
-// ─── Runner Function ──────────────────────────────────────────────────────────
+// ─── Runner ───────────────────────────────────────────────────────────────────
 
 export async function runCreative(params: {
-  niche: string;
-  audience: string;
-  offer: string;
-  tone: string;
-  type: CreativeType;
-  strategy?: Strategy;
+  niche:            string;
+  audience:         string;
+  offer:            string;
+  tone:             string;
+  type:             CreativeType;
+  strategy_output?: StrategyBrainOutput;
 }): Promise<string> {
   const result = await creativeWorkflow.invoke({
-    niche: params.niche,
-    audience: params.audience,
-    offer: params.offer,
-    tone: params.tone,
-    type: params.type,
-    strategy: params.strategy,
-    output: '',
+    niche:           params.niche,
+    audience:        params.audience,
+    offer:           params.offer,
+    tone:            params.tone,
+    type:            params.type,
+    strategy_output: params.strategy_output,
+    output:          '',
   });
 
   return result.output;
